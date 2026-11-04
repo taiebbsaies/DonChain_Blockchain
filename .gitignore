@@ -1,0 +1,10 @@
+node_modules
+.next
+dist
+.turbo
+.env
+.env.*
+!.env.example
+contracts/out
+contracts/cache
+contracts/broadcast/**/31337/
