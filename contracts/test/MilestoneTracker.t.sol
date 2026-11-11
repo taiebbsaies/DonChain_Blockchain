@@ -45,7 +45,7 @@ contract MilestoneTrackerTest is BaseTest {
     function test_RevertWhen_NonOrgCreates() public {
         vm.prank(alice);
         vm.expectRevert(MilestoneTracker.NotOrg.selector);
-        tracker.createMilestone(supplier, 1e6, uint64(block.timestamp + 1 days), keccak256("d"));
+        tracker.createMilestone(supplier, 1e6, uint64(block.timestamp + 1 days), "ipfs://d");
     }
 
     function test_RevertWhen_OrgAttestationRevoked() public {
@@ -55,13 +55,13 @@ contract MilestoneTrackerTest is BaseTest {
 
         vm.prank(org);
         vm.expectRevert(MilestoneTracker.NotOrg.selector);
-        tracker.createMilestone(supplier, 1e6, uint64(block.timestamp + 1 days), keccak256("d"));
+        tracker.createMilestone(supplier, 1e6, uint64(block.timestamp + 1 days), "ipfs://d");
     }
 
     function test_RevertWhen_SupplierNotAttested() public {
         vm.prank(org);
         vm.expectRevert(MilestoneTracker.NotAttestedSupplier.selector);
-        tracker.createMilestone(alice, 1e6, uint64(block.timestamp + 1 days), keccak256("d"));
+        tracker.createMilestone(alice, 1e6, uint64(block.timestamp + 1 days), "ipfs://d");
     }
 
     function test_RevertWhen_SupplierIsOrg() public {
@@ -71,36 +71,37 @@ contract MilestoneTrackerTest is BaseTest {
 
         vm.prank(org);
         vm.expectRevert(MilestoneTracker.SeparationOfPowers.selector);
-        tracker.createMilestone(org, 1e6, uint64(block.timestamp + 1 days), keccak256("d"));
+        tracker.createMilestone(org, 1e6, uint64(block.timestamp + 1 days), "ipfs://d");
     }
 
     function test_RevertWhen_InvalidMilestoneParams() public {
         vm.startPrank(org);
         vm.expectRevert(MilestoneTracker.InvalidParams.selector);
-        tracker.createMilestone(supplier, 0, uint64(block.timestamp + 1 days), keccak256("d"));
+        tracker.createMilestone(supplier, 0, uint64(block.timestamp + 1 days), "ipfs://d");
         vm.expectRevert(MilestoneTracker.InvalidParams.selector);
-        tracker.createMilestone(supplier, 1e6, uint64(block.timestamp), keccak256("d"));
+        tracker.createMilestone(supplier, 1e6, uint64(block.timestamp), "ipfs://d");
         vm.expectRevert(MilestoneTracker.InvalidParams.selector);
-        tracker.createMilestone(supplier, 1e6, uint64(block.timestamp + 1 days), bytes32(0));
+        tracker.createMilestone(supplier, 1e6, uint64(block.timestamp + 1 days), "");
         vm.stopPrank();
     }
 
     function test_FrozenFieldsStored() public {
         uint64 deadline = uint64(block.timestamp + 10 days);
         vm.prank(org);
-        uint256 id = tracker.createMilestone(supplier, 123e6, deadline, keccak256("desc"));
+        uint256 id = tracker.createMilestone(supplier, 123e6, deadline, "ipfs://desc");
 
         MilestoneTracker.Milestone memory m = tracker.getMilestone(id);
         assertEq(m.supplier, supplier);
         assertEq(m.amount, 123e6);
         assertEq(m.deadline, deadline);
-        assertEq(m.descriptionHash, keccak256("desc"));
+        assertEq(m.descriptionHash, keccak256("ipfs://desc"));
+        assertEq(m.descriptionURI, "ipfs://desc");
         assertEq(uint8(m.status), uint8(MilestoneTracker.Status.Draft));
     }
 
     function test_RevertWhen_LockExceedsRaised() public {
         vm.startPrank(org);
-        uint256 id = tracker.createMilestone(supplier, 2_001e6, uint64(block.timestamp + 1 days), keccak256("d"));
+        uint256 id = tracker.createMilestone(supplier, 2_001e6, uint64(block.timestamp + 1 days), "ipfs://d");
         vm.expectRevert(MilestoneTracker.ExceedsRaised.selector);
         tracker.lockMilestone(id);
         vm.stopPrank();
@@ -110,7 +111,7 @@ contract MilestoneTrackerTest is BaseTest {
         (DonationVault v2, MilestoneTracker t2) = _createCampaign(true);
         v2; // campagne en collecte
         vm.startPrank(org);
-        uint256 id = t2.createMilestone(supplier, 1e6, uint64(block.timestamp + 40 days), keccak256("d"));
+        uint256 id = t2.createMilestone(supplier, 1e6, uint64(block.timestamp + 40 days), "ipfs://d");
         vm.expectRevert(MilestoneTracker.CampaignNotActive.selector);
         t2.lockMilestone(id);
         vm.stopPrank();
@@ -119,7 +120,7 @@ contract MilestoneTrackerTest is BaseTest {
     function test_SequentialBlocksSecondLock() public {
         _createAndLock(500e6);
         vm.startPrank(org);
-        uint256 id2 = tracker.createMilestone(supplier, 500e6, uint64(block.timestamp + 30 days), keccak256("d2"));
+        uint256 id2 = tracker.createMilestone(supplier, 500e6, uint64(block.timestamp + 30 days), "ipfs://d2");
         vm.expectRevert(MilestoneTracker.MilestoneInProgress.selector);
         tracker.lockMilestone(id2);
         vm.stopPrank();
@@ -222,7 +223,7 @@ contract MilestoneTrackerTest is BaseTest {
         vm.stopPrank();
         vm.warp(v2.fundingDeadline());
         vm.startPrank(org);
-        uint256 id2 = t2.createMilestone(supplier, 500e6, uint64(block.timestamp + 30 days), keccak256("desc"));
+        uint256 id2 = t2.createMilestone(supplier, 500e6, uint64(block.timestamp + 30 days), "ipfs://desc");
         t2.lockMilestone(id2);
         t2.submitProof(id2, "bafy");
         vm.stopPrank();
@@ -344,7 +345,7 @@ contract MilestoneTrackerTest is BaseTest {
 
         vm.prank(org);
         vm.expectRevert(MilestoneTracker.CampaignNotActive.selector);
-        tracker.createMilestone(supplier, 1e6, uint64(block.timestamp + 1 days), keccak256("d"));
+        tracker.createMilestone(supplier, 1e6, uint64(block.timestamp + 1 days), "ipfs://d");
 
         vm.prank(org);
         vm.expectRevert(abi.encodeWithSelector(DonationVault.InvalidState.selector, DonationVault.State.Halted));
@@ -403,7 +404,7 @@ contract MilestoneTrackerTest is BaseTest {
         tracker.executeRelease(id);
 
         vm.startPrank(org);
-        uint256 id2 = tracker.createMilestone(supplier, b, uint64(block.timestamp + 30 days), keccak256("d2"));
+        uint256 id2 = tracker.createMilestone(supplier, b, uint64(block.timestamp + 30 days), "ipfs://d2");
         if (a + b > 2_000e6) vm.expectRevert(MilestoneTracker.ExceedsRaised.selector);
         tracker.lockMilestone(id2);
         vm.stopPrank();

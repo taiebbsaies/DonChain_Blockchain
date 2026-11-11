@@ -5,7 +5,7 @@ Foundry project. Solidity 0.8.28, OpenZeppelin 5.7.0 (vendored in `lib/`).
 | Contract | Role |
 |---|---|
 | `AttestationRegistry` | KYC whitelist: `ORG_ROLE`, `SUPPLIER_ROLE`, `AUDITOR_ROLE`, `PAUSER_ROLE` (admin = Safe multisig) |
-| `CampaignFactory` | Deploys one `DonationVault` + one `MilestoneTracker` per campaign (EIP-1167 clones) |
+| `CampaignFactory` | Deploys one `DonationVault` + one `MilestoneTracker` per campaign (EIP-1167 clones), stores the campaign `metadataURI` |
 | `DonationVault` | USDC escrow, softCap / hardCap, SBT mint, pull refunds, release only by its tracker |
 | `MilestoneTracker` | Frozen milestones, IPFS proof history, supplier EIP-712 confirmation + auditor approval, expiry |
 | `DonationReceipt` | Soulbound receipt (ERC-721 + ERC-5192) |
@@ -25,6 +25,14 @@ multisig reassignment for blacklisted USDC addresses.
 forge build
 forge test                       # unit, fuzz and invariant tests
 forge coverage --report summary --no-match-coverage "test|script"
+
+# Local demo chain (anvil accounts: 0 admin, 1 org, 2 supplier, 3 auditor, 4-7 donors)
+anvil
+forge script script/LocalDemo.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
+pnpm --filter @donchain/shared generate   # refresh ABIs + addresses for the web app
+
+# Skip the 3-day challenge window on campaign B's approved milestone, then release it
+cast rpc evm_increaseTime 259200 --rpc-url http://127.0.0.1:8545 && cast rpc evm_mine --rpc-url http://127.0.0.1:8545
 
 cp .env.example .env             # fill ADMIN_ADDRESS, BASESCAN_API_KEY
 source .env

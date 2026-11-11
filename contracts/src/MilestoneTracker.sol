@@ -29,7 +29,8 @@ contract MilestoneTracker is Initializable, EIP712 {
         address supplier;
         uint256 amount;
         uint64 deadline;
-        bytes32 descriptionHash;
+        bytes32 descriptionHash; // keccak256(descriptionURI)
+        string descriptionURI; // ipfs://<CID> du document descriptif (aucune donnée personnelle)
         // État
         Status status;
         bool supplierConfirmed;
@@ -64,7 +65,12 @@ contract MilestoneTracker is Initializable, EIP712 {
     uint256 public activeCount;
 
     event MilestoneCreated(
-        uint256 indexed id, address indexed supplier, uint256 amount, uint64 deadline, bytes32 descriptionHash
+        uint256 indexed id,
+        address indexed supplier,
+        uint256 amount,
+        uint64 deadline,
+        bytes32 descriptionHash,
+        string descriptionURI
     );
     event MilestoneLocked(uint256 indexed id);
     event MilestoneSubmitted(uint256 indexed id, string cid, uint256 proofIndex);
@@ -172,17 +178,19 @@ contract MilestoneTracker is Initializable, EIP712 {
     // ------------------------------------------------------------------
 
     /// @notice Crée un jalon. Prestataire, montant, date limite et description sont figés à vie.
-    function createMilestone(address supplier, uint256 amount, uint64 deadline, bytes32 descriptionHash)
+    /// @param descriptionURI URI du document descriptif (ipfs://<CID>) ; son hash est figé on-chain.
+    function createMilestone(address supplier, uint256 amount, uint64 deadline, string calldata descriptionURI)
         external
         onlyOrg
         returns (uint256 id)
     {
         DonationVault.State s = vault.state();
         if (s != DonationVault.State.Funding && s != DonationVault.State.Active) revert CampaignNotActive();
-        if (amount == 0 || deadline <= block.timestamp || descriptionHash == bytes32(0)) revert InvalidParams();
+        if (amount == 0 || deadline <= block.timestamp || bytes(descriptionURI).length == 0) revert InvalidParams();
         if (supplier == org) revert SeparationOfPowers();
         if (!registry.hasRole(registry.SUPPLIER_ROLE(), supplier)) revert NotAttestedSupplier();
 
+        bytes32 descriptionHash = keccak256(bytes(descriptionURI));
         id = _milestones.length;
         _milestones.push(
             Milestone({
@@ -190,13 +198,14 @@ contract MilestoneTracker is Initializable, EIP712 {
                 amount: amount,
                 deadline: deadline,
                 descriptionHash: descriptionHash,
+                descriptionURI: descriptionURI,
                 status: Status.Draft,
                 supplierConfirmed: false,
                 approvedAt: 0,
                 approvedBy: address(0)
             })
         );
-        emit MilestoneCreated(id, supplier, amount, deadline, descriptionHash);
+        emit MilestoneCreated(id, supplier, amount, deadline, descriptionHash, descriptionURI);
     }
 
     /// @notice Draft -> Pending : engage les fonds. Exige une campagne Active.

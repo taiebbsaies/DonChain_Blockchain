@@ -64,7 +64,8 @@ abstract contract BaseTest is Test {
                 hardCap: HARD_CAP,
                 minDonation: MIN_DONATION,
                 fundingDeadline: uint64(block.timestamp) + FUNDING_DURATION,
-                sequential: sequential
+                sequential: sequential,
+                metadataURI: "ipfs://campaign"
             })
         );
     }
@@ -90,7 +91,7 @@ abstract contract BaseTest is Test {
 
     function _createAndLock(uint256 amount) internal returns (uint256 id) {
         vm.startPrank(org);
-        id = tracker.createMilestone(supplier, amount, uint64(block.timestamp + 30 days), keccak256("desc"));
+        id = tracker.createMilestone(supplier, amount, uint64(block.timestamp + 30 days), "ipfs://desc");
         tracker.lockMilestone(id);
         vm.stopPrank();
     }

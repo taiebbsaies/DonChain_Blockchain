@@ -4,6 +4,7 @@ out = "out"
 libs = ["lib"]
 solc = "0.8.28"
 remappings = ["@openzeppelin/=lib/openzeppelin-contracts/"]
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
 
 [fuzz]
 runs = 1000

@@ -73,7 +73,7 @@ contract Handler is Test {
         amount = bound(amount, 1, available);
 
         vm.startPrank(org);
-        uint256 id = tracker.createMilestone(supplier, amount, uint64(block.timestamp + 30 days), keccak256("d"));
+        uint256 id = tracker.createMilestone(supplier, amount, uint64(block.timestamp + 30 days), "ipfs://d");
         tracker.lockMilestone(id);
         tracker.submitProof(id, "bafy");
         vm.stopPrank();
@@ -111,7 +111,7 @@ contract Handler is Test {
         amount = bound(amount, 1, available);
 
         vm.startPrank(org);
-        uint256 id = tracker.createMilestone(supplier, amount, uint64(block.timestamp + 1 days), keccak256("e"));
+        uint256 id = tracker.createMilestone(supplier, amount, uint64(block.timestamp + 1 days), "ipfs://e");
         tracker.lockMilestone(id);
         vm.stopPrank();
 
@@ -154,9 +154,7 @@ contract InvariantsTest is BaseTest {
 
     /// @notice Le solde du coffre couvre exactement les fonds restant dus (§9.7).
     function invariant_VaultBalanceCoversOwed() public view {
-        assertEq(
-            usdc.balanceOf(address(vault)), vault.totalRaised() - vault.totalReleased() - vault.totalRefunded()
-        );
+        assertEq(usdc.balanceOf(address(vault)), vault.totalRaised() - vault.totalReleased() - vault.totalRefunded());
     }
 
     /// @notice Un jalon n'est libéré qu'une seule fois (§8.2).

@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/* Jetons de couleur (contraste WCAG 2.1 AA vérifié pour le texte sur surface) */
+:root {
+  --bg: #f6f6f3;
+  --surface: #ffffff;
+  --surface-muted: #eeeeea;
+  --ink: #1c1c1a;
+  --ink-muted: #5c5c56;
+  --line: #e0e0da;
+  --brand: #0f766e;
+  --brand-ink: #ffffff;
+  --success: #067647;
+  --info: #175cd3;
+  --warning: #b54708;
+  --danger: #b42318;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121211;
+    --surface: #1b1b19;
+    --surface-muted: #262623;
+    --ink: #ecece8;
+    --ink-muted: #a4a49c;
+    --line: #33332f;
+    --brand: #2dd4bf;
+    --brand-ink: #062a27;
+    --success: #4ade80;
+    --info: #7cb4ff;
+    --warning: #fdb062;
+    --danger: #ff8a80;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-success: var(--success);
+  --color-info: var(--info);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-surface p-5;
+  }
+  .btn-primary,
+  .btn-secondary,
+  .btn-warning,
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition
+      focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply bg-brand text-brand-ink hover:opacity-90;
+  }
+  .btn-secondary {
+    @apply border border-line bg-surface text-ink hover:bg-surface-muted;
+  }
+  .btn-warning {
+    @apply bg-warning text-white hover:opacity-90;
+  }
+  .btn-ghost {
+    @apply px-2 text-ink-muted hover:text-ink;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-ink
+      focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap;
+  }
+  .tone-info {
+    @apply border-info/30 bg-info/10 text-info;
+  }
+  .tone-success {
+    @apply border-success/30 bg-success/10 text-success;
+  }
+  .tone-warning {
+    @apply border-warning/30 bg-warning/10 text-warning;
+  }
+  .tone-danger {
+    @apply border-danger/30 bg-danger/10 text-danger;
+  }
+  .tone-neutral {
+    @apply border-line bg-surface-muted text-ink-muted;
+  }
+  .link {
+    @apply text-brand underline-offset-2 hover:underline;
+  }
+  .nav-link {
+    @apply rounded text-ink-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-brand;
+  }
+}

@@ -93,8 +93,8 @@ contract DonationVault is Initializable, ReentrancyGuard, Pausable {
     /// @notice Appelé une seule fois par la CampaignFactory dans la transaction de création.
     function initialize(InitParams calldata p) external initializer {
         if (
-            address(p.usdc) == address(0) || address(p.receipt) == address(0)
-                || address(p.registry) == address(0) || p.tracker == address(0) || p.org == address(0)
+            address(p.usdc) == address(0) || address(p.receipt) == address(0) || address(p.registry) == address(0)
+                || p.tracker == address(0) || p.org == address(0)
         ) revert ZeroAddress();
         usdc = p.usdc;
         receipt = p.receipt;

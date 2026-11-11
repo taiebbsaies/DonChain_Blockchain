@@ -14,7 +14,12 @@ contract CampaignFactoryTest is BaseTest {
         returns (CampaignFactory.CampaignParams memory)
     {
         return CampaignFactory.CampaignParams({
-            softCap: soft, hardCap: hard, minDonation: min, fundingDeadline: deadline, sequential: true
+            softCap: soft,
+            hardCap: hard,
+            minDonation: min,
+            fundingDeadline: deadline,
+            sequential: true,
+            metadataURI: "ipfs://c"
         });
     }
 
@@ -30,6 +35,7 @@ contract CampaignFactoryTest is BaseTest {
         assertEq(c.org, org);
         assertEq(address(c.vault), address(v2));
         assertEq(address(c.tracker), address(t2));
+        assertEq(c.metadataURI, "ipfs://campaign");
 
         assertEq(v2.tracker(), address(t2));
         assertEq(address(t2.vault()), address(v2));
@@ -59,6 +65,10 @@ contract CampaignFactoryTest is BaseTest {
         factory.createCampaign(_params(1, 2, 1, uint64(block.timestamp))); // deadline passée
         vm.expectRevert(CampaignFactory.InvalidParams.selector);
         factory.createCampaign(_params(1, 2, 1, uint64(block.timestamp + 366 days))); // trop longue
+        CampaignFactory.CampaignParams memory p = _params(1, 2, 1, dl);
+        p.metadataURI = "";
+        vm.expectRevert(CampaignFactory.InvalidParams.selector);
+        factory.createCampaign(p); // métadonnées manquantes
         vm.stopPrank();
     }
 

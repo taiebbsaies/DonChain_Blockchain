@@ -28,6 +28,7 @@ contract CampaignFactory {
         address org;
         DonationVault vault;
         MilestoneTracker tracker;
+        string metadataURI;
     }
 
     Campaign[] private _campaigns;
@@ -40,7 +41,8 @@ contract CampaignFactory {
         address tracker,
         uint256 softCap,
         uint256 hardCap,
-        uint64 fundingDeadline
+        uint64 fundingDeadline,
+        string metadataURI
     );
 
     error NotAttestedOrg();
@@ -71,6 +73,9 @@ contract CampaignFactory {
         uint256 minDonation;
         uint64 fundingDeadline;
         bool sequential;
+        /// @dev URI du JSON public de la campagne (nom, description, image) : ipfs://<CID>.
+        ///      Aucune donnée personnelle (§12).
+        string metadataURI;
     }
 
     function createCampaign(CampaignParams calldata p)
@@ -79,9 +84,8 @@ contract CampaignFactory {
     {
         if (!registry.hasRole(registry.ORG_ROLE(), msg.sender)) revert NotAttestedOrg();
         if (
-            p.softCap == 0 || p.softCap > p.hardCap || p.minDonation > p.softCap
-                || p.fundingDeadline <= block.timestamp
-                || p.fundingDeadline > block.timestamp + MAX_FUNDING_DURATION
+            p.softCap == 0 || p.softCap > p.hardCap || p.minDonation > p.softCap || p.fundingDeadline <= block.timestamp
+                || p.fundingDeadline > block.timestamp + MAX_FUNDING_DURATION || bytes(p.metadataURI).length == 0
         ) revert InvalidParams();
 
         vault = DonationVault(Clones.clone(vaultImplementation));
@@ -114,11 +118,18 @@ contract CampaignFactory {
         receipt.grantRole(receipt.MINTER_ROLE(), address(vault));
 
         campaignId = _campaigns.length;
-        _campaigns.push(Campaign({org: msg.sender, vault: vault, tracker: tracker}));
+        _campaigns.push(Campaign({org: msg.sender, vault: vault, tracker: tracker, metadataURI: p.metadataURI}));
         isVault[address(vault)] = true;
 
         emit CampaignCreated(
-            campaignId, msg.sender, address(vault), address(tracker), p.softCap, p.hardCap, p.fundingDeadline
+            campaignId,
+            msg.sender,
+            address(vault),
+            address(tracker),
+            p.softCap,
+            p.hardCap,
+            p.fundingDeadline,
+            p.metadataURI
         );
     }
 

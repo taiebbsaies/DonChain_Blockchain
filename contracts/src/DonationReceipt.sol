@@ -32,11 +32,7 @@ contract DonationReceipt is ERC721, AccessControl, IERC5192 {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
 
-    function mint(address donor, address campaign, uint256 amount)
-        external
-        onlyRole(MINTER_ROLE)
-        returns (uint256 id)
-    {
+    function mint(address donor, address campaign, uint256 amount) external onlyRole(MINTER_ROLE) returns (uint256 id) {
         id = _nextId++;
         _receipts[id] = Receipt(campaign, amount, uint64(block.timestamp));
         // _mint (et non _safeMint) : évite un callback vers le donateur (réentrance)
@@ -56,11 +52,7 @@ contract DonationReceipt is ERC721, AccessControl, IERC5192 {
     }
 
     /// @dev Bloque tout transfert et toute destruction : seul le mint est autorisé
-    function _update(address to, uint256 tokenId, address auth)
-        internal
-        override
-        returns (address)
-    {
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
         if (_ownerOf(tokenId) != address(0)) revert SoulboundToken();
         return super._update(to, tokenId, auth);
     }
@@ -73,12 +65,7 @@ contract DonationReceipt is ERC721, AccessControl, IERC5192 {
         revert SoulboundToken();
     }
 
-    function supportsInterface(bytes4 interfaceId)
-        public
-        view
-        override(ERC721, AccessControl)
-        returns (bool)
-    {
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, AccessControl) returns (bool) {
         return interfaceId == 0xb45a3c0e // ERC-5192
             || super.supportsInterface(interfaceId);
     }
