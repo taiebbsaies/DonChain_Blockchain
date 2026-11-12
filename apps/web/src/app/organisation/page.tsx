@@ -3,6 +3,8 @@
 import { RoleGate } from "@/components/pro/RoleGate";
 import { CreateCampaignForm, OrgCampaign } from "@/components/pro/OrgPanels";
 import { Notice } from "@/components/Notice";
+import { ApiSignIn } from "@/components/pro/ApiUpload";
+import { apiEnabled } from "@/lib/api";
 import { useAllCampaignDetails } from "@/lib/hooks";
 
 export default function OrganisationPage() {
@@ -23,6 +25,15 @@ export default function OrganisationPage() {
           const mine = details?.filter((d) => d.summary.org.toLowerCase() === account.toLowerCase()) ?? [];
           return (
             <div className="space-y-6">
+              {apiEnabled && (
+                <div className="card flex flex-wrap items-center justify-between gap-3 text-sm">
+                  <span className="max-w-xl text-ink-muted">
+                    Connectez-vous au service DonChain pour publier descriptions et preuves sur IPFS. Sans connexion,
+                    les descriptions sont inscrites directement dans la transaction.
+                  </span>
+                  <ApiSignIn />
+                </div>
+              )}
               <CreateCampaignForm />
               {error && <Notice tone="danger">Lecture impossible : {error.message}</Notice>}
               {isLoading && <p className="text-ink-muted">Chargement de vos campagnes…</p>}

@@ -22,6 +22,8 @@ export function AuditMilestone({ m, detail, account }: { m: Milestone; detail: C
   const tracker = detail.summary.tracker;
   const me = account.toLowerCase();
   const conflict = me === detail.summary.org.toLowerCase() || me === m.supplier.toLowerCase();
+  const hasFirst = m.firstApprover !== "0x0000000000000000000000000000000000000000";
+  const iAmFirst = hasFirst && m.firstApprover.toLowerCase() === me;
 
   async function approve() {
     await tx.run("approve", () =>
@@ -99,6 +101,17 @@ export function AuditMilestone({ m, detail, account }: { m: Milestone; detail: C
           : "○ Le prestataire n'a pas encore signé l'accusé de réception. L'approbation est bloquée en attendant."}
       </p>
 
+      {m.requiresSecondApproval && (
+        <Notice tone={iAmFirst ? "warning" : "info"}>
+          Montant élevé : deux auditeurs distincts doivent approuver ({hasFirst ? "1" : "0"}/2).{" "}
+          {iAmFirst
+            ? "Vous avez déjà donné la première approbation : un autre auditeur doit confirmer."
+            : hasFirst
+              ? "Votre approbation sera la seconde et ouvrira la fenêtre de contestation."
+              : "Votre approbation sera la première ; un second auditeur devra confirmer."}
+        </Notice>
+      )}
+
       {conflict && (
         <Notice tone="warning">
           Vous êtes l&apos;organisation ou le prestataire de ce jalon : la séparation des pouvoirs vous interdit de
@@ -116,10 +129,16 @@ export function AuditMilestone({ m, detail, account }: { m: Milestone; detail: C
             <button
               type="button"
               className="btn-primary"
-              disabled={!m.supplierConfirmed || !!tx.pending}
+              disabled={!m.supplierConfirmed || !!tx.pending || iAmFirst}
               onClick={approve}
             >
-              {tx.pending === "approve" ? "Approbation…" : "Approuver"}
+              {tx.pending === "approve"
+                ? "Approbation…"
+                : m.requiresSecondApproval
+                  ? hasFirst
+                    ? "Approuver (2/2)"
+                    : "Approuver (1/2)"
+                  : "Approuver"}
             </button>
             <button
               type="button"

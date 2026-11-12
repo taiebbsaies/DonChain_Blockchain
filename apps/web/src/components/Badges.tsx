@@ -17,6 +17,7 @@ const MILESTONE_LABELS: Record<MilestoneStatus, { label: string; tone: string }>
   Rejected: { label: "Rejeté", tone: "tone-danger" },
   Cancelled: { label: "Annulé", tone: "tone-neutral" },
   Expired: { label: "Expiré", tone: "tone-danger" },
+  Disputed: { label: "Contesté", tone: "tone-warning" },
 };
 
 export function CampaignStateBadge({ state, paused }: { state: CampaignState; paused?: boolean }) {

@@ -1,12 +1,13 @@
 // Génère src/abis.ts et src/deployments.ts depuis la sortie Foundry.
 // Usage : (cd contracts && forge build) puis `pnpm --filter @donchain/shared generate`
-import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const contractsDir = join(root, "..", "..", "contracts");
 const CONTRACTS = [
+  "TimelockController",
   "CampaignFactory",
   "DonationVault",
   "MilestoneTracker",
@@ -49,9 +50,32 @@ writeFileSync(
   registry: \`0x\${string}\`;
   receipt: \`0x\${string}\`;
   factory: \`0x\${string}\`;
+  /** Safe multisig ou TimelockController administrant le registre (absent en local). */
+  admin?: \`0x\${string}\`;
 };
 
 export const deployments: Record<number, Deployment> = ${JSON.stringify(deployments, null, 2)};
 `,
 );
+// Copie pour l'API NestJS (exécutée par Node, qui ne charge pas le TypeScript source de ce paquet)
+const apiGenerated = join(root, "..", "..", "apps", "api", "src", "generated");
+if (existsSync(join(apiGenerated, ".."))) {
+  mkdirSync(apiGenerated, { recursive: true });
+  writeFileSync(
+    join(apiGenerated, "contracts.ts"),
+    abis.replace(header, "// Fichier généré par packages/shared/scripts/generate.mjs. Ne pas modifier à la main.\n\n") +
+      `\nexport type Deployment = {
+  chainId: number;
+  startBlock: number;
+  usdc: \`0x\${string}\`;
+  registry: \`0x\${string}\`;
+  receipt: \`0x\${string}\`;
+  factory: \`0x\${string}\`;
+  admin?: \`0x\${string}\`;
+};
+
+export const deployments: Record<number, Deployment> = ${JSON.stringify(deployments, null, 2)};
+`,
+  );
+}
 console.log(`abis.ts : ${CONTRACTS.length + 1} ABI ; deployments.ts : chaînes ${Object.keys(deployments).join(", ") || "aucune"}`);

@@ -10,11 +10,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@donchain/shared": "workspace:*",
+    "@tanstack/react-query": "^5.80.0",
+    "multiformats": "^14.0.5",
     "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "@donchain/shared": "workspace:*",
-    "@tanstack/react-query": "^5.80.0",
     "viem": "^2.57.14",
     "wagmi": "^2.15.0"
   },

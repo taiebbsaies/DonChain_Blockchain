@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @title Registre des acteurs attestés (KYC)
-/// @notice Whitelist des organisations, prestataires, auditeurs et pauseurs (§7.3, §9.1).
+/// @notice Whitelist des organisations, prestataires, auditeurs, arbitres et pauseurs (§7.3, §9.1).
 /// @dev MVP : rôles AccessControl gérés par l'admin (multisig Safe + timelock en production).
 ///      Phase 2 : remplacer par une intégration EAS en gardant la même interface `hasRole`.
 contract AttestationRegistry is AccessControl {
@@ -12,6 +12,8 @@ contract AttestationRegistry is AccessControl {
     bytes32 public constant AUDITOR_ROLE = keccak256("AUDITOR_ROLE");
     bytes32 public constant SUPPLIER_ROLE = keccak256("SUPPLIER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    /// @notice Arbitres habilités à trancher les contestations des donateurs (Phase 2, §5.5).
+    bytes32 public constant ARBITER_ROLE = keccak256("ARBITER_ROLE");
 
     error ZeroAddress();
 

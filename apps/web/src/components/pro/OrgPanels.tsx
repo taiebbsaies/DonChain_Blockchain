@@ -3,14 +3,17 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { isAddress, type Address } from "viem";
-import { useWriteContract } from "wagmi";
+import { useAccount, useWriteContract } from "wagmi";
 import { campaignFactoryAbi, milestoneTrackerAbi } from "@donchain/shared";
 import { activeMilestoneCount, type CampaignDetail, type Milestone } from "@/lib/chain-data";
 import { TARGET_CHAIN_ID, deployment } from "@/lib/config";
 import { formatDate, formatUsdc, parseUsdc } from "@/lib/format";
 import { toDataUri } from "@/lib/metadata";
+import { apiEnabled, publishJson, useApiSession } from "@/lib/api";
+import { FileUpload } from "@/components/pro/ApiUpload";
 import { useTransaction } from "@/lib/hooks";
 import { AddressText } from "@/components/AddressText";
+import { AmountEcho } from "@/components/AmountEcho";
 import { CampaignStateBadge, MilestoneStatusBadge } from "@/components/Badges";
 import { FundingProgress } from "@/components/FundingProgress";
 import { Notice } from "@/components/Notice";
@@ -46,6 +49,8 @@ const PRIVACY_HINT = "Public et définitif : aucune donnée personnelle (nom de 
 export function CreateCampaignForm() {
   const { writeContractAsync } = useWriteContract();
   const tx = useTransaction();
+  const { address } = useAccount();
+  const session = useApiSession(address);
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -77,6 +82,16 @@ export function CreateCampaignForm() {
     if (!deployment) return;
 
     const factory = deployment.factory;
+    let metadataURI: string;
+    try {
+      metadataURI = await publishJson(
+        session,
+        { name: form.name.trim(), description: form.description.trim() },
+        toDataUri,
+      );
+    } catch (err) {
+      return setProblem(`Publication des informations impossible : ${(err as Error).message}`);
+    }
     const ok = await tx.run("create", () =>
       writeContractAsync({
         chainId: TARGET_CHAIN_ID,
@@ -90,7 +105,7 @@ export function CreateCampaignForm() {
             minDonation,
             fundingDeadline: deadline,
             sequential: form.sequential,
-            metadataURI: toDataUri({ name: form.name.trim(), description: form.description.trim() }),
+            metadataURI,
           },
         ],
       }),
@@ -117,12 +132,15 @@ export function CreateCampaignForm() {
       <div className="grid gap-4 sm:grid-cols-3">
         <Field id="c-soft" label="Objectif minimal (USDC)" hint="Sous ce montant, les donateurs sont remboursés.">
           <input id="c-soft" className="input" inputMode="decimal" value={form.softCap} onChange={set("softCap")} />
+          <AmountEcho value={form.softCap} />
         </Field>
         <Field id="c-hard" label="Objectif maximal (USDC)" hint="Les dons au-delà sont refusés.">
           <input id="c-hard" className="input" inputMode="decimal" value={form.hardCap} onChange={set("hardCap")} />
+          <AmountEcho value={form.hardCap} />
         </Field>
         <Field id="c-min" label="Don minimum (USDC)">
           <input id="c-min" className="input" inputMode="decimal" value={form.minDonation} onChange={set("minDonation")} />
+          <AmountEcho value={form.minDonation} />
         </Field>
       </div>
       <label className="flex items-start gap-2 text-sm">
@@ -166,6 +184,8 @@ function CreateMilestoneForm({ detail }: { detail: CampaignDetail }) {
 function MilestoneFormBody({ detail, onDone }: { detail: CampaignDetail; onDone: () => void }) {
   const { writeContractAsync } = useWriteContract();
   const tx = useTransaction();
+  const { address } = useAccount();
+  const session = useApiSession(address);
   const [form, setForm] = useState({ supplier: "", amount: "", deadline: "", title: "", quote: "" });
   const [problem, setProblem] = useState<string | null>(null);
   const set = (key: keyof typeof form) => (e: { target: { value: string } }) =>
@@ -184,6 +204,12 @@ function MilestoneFormBody({ detail, onDone }: { detail: CampaignDetail; onDone:
     if (!deadline || deadline <= detail.chainNow) return setProblem("La date limite doit être dans le futur.");
     if (!form.title.trim()) return setProblem("Décrivez le jalon.");
 
+    let descriptionURI: string;
+    try {
+      descriptionURI = await publishJson(session, { title: form.title.trim(), quote: form.quote.trim() }, toDataUri);
+    } catch (err) {
+      return setProblem(`Publication de la description impossible : ${(err as Error).message}`);
+    }
     const ok = await tx.run("create-milestone", () =>
       writeContractAsync({
         chainId: TARGET_CHAIN_ID,
@@ -194,7 +220,7 @@ function MilestoneFormBody({ detail, onDone }: { detail: CampaignDetail; onDone:
           form.supplier as Address,
           amount,
           deadline,
-          toDataUri({ title: form.title.trim(), quote: form.quote.trim() }),
+          descriptionURI,
         ],
       }),
     );
@@ -228,6 +254,7 @@ function MilestoneFormBody({ detail, onDone }: { detail: CampaignDetail; onDone:
         <div className="grid grid-cols-2 gap-3">
           <Field id={`${prefix}-amount`} label="Montant (USDC)">
             <input id={`${prefix}-amount`} className="input" inputMode="decimal" value={form.amount} onChange={set("amount")} />
+            <AmountEcho value={form.amount} />
           </Field>
           <Field id={`${prefix}-deadline`} label="Date limite">
             <input id={`${prefix}-deadline`} type="date" className="input" value={form.deadline} onChange={set("deadline")} />
@@ -360,6 +387,11 @@ function OrgMilestone({ m, detail }: { m: Milestone; detail: CampaignDetail }) {
           <button type="submit" className="btn-primary" disabled={!!tx.pending || !cid.trim()}>
             {tx.pending === "proof" ? "Envoi…" : "Soumettre"}
           </button>
+          {apiEnabled && (
+            <div className="w-full">
+              <FileUpload kind="proof" label="Ou téléverser la preuve (facture, bon de livraison…)" onUploaded={setCid} />
+            </div>
+          )}
           {m.status === "Submitted" && (
             <p className="w-full text-xs text-ink-muted">
               Une révision est ajoutée à l&apos;historique et oblige le prestataire à signer de nouveau.

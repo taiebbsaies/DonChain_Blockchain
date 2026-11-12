@@ -11,6 +11,7 @@ import { Notice } from "@/components/Notice";
 import { DonatePanel } from "@/components/campaign/DonatePanel";
 import { RefundPanel } from "@/components/campaign/RefundPanel";
 import { MilestoneList } from "@/components/campaign/MilestoneList";
+import { apiEnabled } from "@/lib/api";
 
 export default function CampaignPage() {
   const params = useParams<{ id: string }>();
@@ -68,6 +69,14 @@ export default function CampaignPage() {
             </dl>
             <p className="text-xs text-ink-muted">
               Coffre <AddressText address={c.vault} /> · Suivi des jalons <AddressText address={c.tracker} />
+              {apiEnabled && (
+                <>
+                  {" · "}
+                  <Link href={`/campaigns/${c.id}/flux`} className="link">
+                    Flux des fonds et exports
+                  </Link>
+                </>
+              )}
             </p>
           </section>
 

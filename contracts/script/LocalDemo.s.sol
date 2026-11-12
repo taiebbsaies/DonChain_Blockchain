@@ -12,7 +12,8 @@ import {MockUSDC} from "../test/mocks/MockUSDC.sol";
 
 /// @notice Déploiement de démonstration sur anvil (LOCAL UNIQUEMENT).
 /// @dev Utilise les comptes déterministes d'anvil :
-///      0 admin/pauser, 1 organisation, 2 prestataire, 3 auditeur, 4-7 donateurs.
+///      0 admin/pauser, 1 organisation, 2 prestataire, 3 auditeur, 4-7 donateurs,
+///      8 second auditeur (double validation), 9 arbitre (contestations).
 ///      Écrit les adresses dans `deployments/31337.json` pour le frontend.
 ///
 ///      anvil
@@ -47,13 +48,16 @@ contract LocalDemo is Script {
         usdc = new MockUSDC();
         AttestationRegistry registry = new AttestationRegistry(admin);
         DonationReceipt receipt = new DonationReceipt(admin);
-        factory = new CampaignFactory(usdc, registry, receipt, 7 days, 3 days);
+        // Phase 2 : double validation à partir de 2 000 USDC, caution de contestation de 10 USDC
+        factory = new CampaignFactory(usdc, registry, receipt, 7 days, 3 days, 2_000e6, 10e6);
         receipt.grantRole(receipt.DEFAULT_ADMIN_ROLE(), address(factory));
 
         registry.grantRole(registry.ORG_ROLE(), vm.addr(orgPk));
         registry.grantRole(registry.SUPPLIER_ROLE(), vm.addr(supplierPk));
         registry.grantRole(registry.AUDITOR_ROLE(), vm.addr(auditorPk));
         registry.grantRole(registry.PAUSER_ROLE(), admin);
+        registry.grantRole(registry.AUDITOR_ROLE(), vm.addr(vm.deriveKey(MNEMONIC, 8)));
+        registry.grantRole(registry.ARBITER_ROLE(), vm.addr(vm.deriveKey(MNEMONIC, 9)));
 
         for (uint256 i; i < 4; i++) {
             usdc.mint(vm.addr(donorPks[i]), 10_000e6);
@@ -122,6 +126,9 @@ contract LocalDemo is Script {
         console.log("Supplier (account 2)", vm.addr(supplierPk));
         console.log("Auditor  (account 3)", vm.addr(auditorPk));
         console.log("Donors   (accounts 4-7) hold 10,000 mUSDC each");
+        console.log("Auditor2 (account 8)", vm.addr(vm.deriveKey(MNEMONIC, 8)));
+        console.log("Arbiter  (account 9)", vm.addr(vm.deriveKey(MNEMONIC, 9)));
+        console.log("Second approval from 2,000 USDC; dispute deposit 10 USDC");
     }
 
     // ------------------------------------------------------------------

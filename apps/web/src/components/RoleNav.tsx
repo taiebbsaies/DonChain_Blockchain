@@ -27,6 +27,11 @@ export function RoleNav() {
           Audit
         </Link>
       )}
+      {(roles.arbiter || roles.auditor) && (
+        <Link href="/arbitrage" className="nav-link">
+          Arbitrage
+        </Link>
+      )}
     </>
   );
 }

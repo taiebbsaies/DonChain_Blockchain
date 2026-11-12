@@ -74,6 +74,6 @@ contract CampaignFactoryTest is BaseTest {
 
     function test_RevertWhen_ConstructorZeroAddress() public {
         vm.expectRevert(CampaignFactory.InvalidParams.selector);
-        new CampaignFactory(usdc, registry, DonationReceipt(address(0)), GRACE, CHALLENGE);
+        new CampaignFactory(usdc, registry, DonationReceipt(address(0)), GRACE, CHALLENGE, 0, 0);
     }
 }

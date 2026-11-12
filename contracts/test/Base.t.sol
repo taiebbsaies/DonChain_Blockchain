@@ -18,6 +18,10 @@ abstract contract BaseTest is Test {
     uint256 constant MIN_DONATION = 1e6;
     uint64 constant FUNDING_DURATION = 30 days;
 
+    /// @dev Paramètres Phase 2 de la fabrique ; les suites dérivées peuvent les modifier avant super.setUp().
+    uint256 secondApprovalThreshold;
+    uint256 disputeDeposit;
+
     MockUSDC usdc;
     AttestationRegistry registry;
     DonationReceipt receipt;
@@ -28,6 +32,8 @@ abstract contract BaseTest is Test {
     address admin = makeAddr("admin");
     address org = makeAddr("org");
     address auditor = makeAddr("auditor");
+    address auditor2 = makeAddr("auditor2");
+    address arbiter = makeAddr("arbiter");
     address pauser = makeAddr("pauser");
     address supplier;
     uint256 supplierPk;
@@ -40,13 +46,16 @@ abstract contract BaseTest is Test {
         usdc = new MockUSDC();
         registry = new AttestationRegistry(admin);
         receipt = new DonationReceipt(admin);
-        factory = new CampaignFactory(usdc, registry, receipt, GRACE, CHALLENGE);
+        factory =
+            new CampaignFactory(usdc, registry, receipt, GRACE, CHALLENGE, secondApprovalThreshold, disputeDeposit);
 
         vm.startPrank(admin);
         receipt.grantRole(receipt.DEFAULT_ADMIN_ROLE(), address(factory));
         registry.grantRole(registry.ORG_ROLE(), org);
         registry.grantRole(registry.SUPPLIER_ROLE(), supplier);
         registry.grantRole(registry.AUDITOR_ROLE(), auditor);
+        registry.grantRole(registry.AUDITOR_ROLE(), auditor2);
+        registry.grantRole(registry.ARBITER_ROLE(), arbiter);
         registry.grantRole(registry.PAUSER_ROLE(), pauser);
         vm.stopPrank();
 

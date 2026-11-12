@@ -24,6 +24,8 @@ contract Handler is Test {
     uint256 public ghostRefunded;
     mapping(uint256 => uint256) public releaseCount;
     uint256 public maxReleaseCount;
+    uint256 public ghostDepositsHeld; // cautions de contestation en cours, détenues par le tracker
+    address public arbiter;
 
     constructor(
         MockUSDC usdc_,
@@ -44,6 +46,8 @@ contract Handler is Test {
             address d = makeAddr(string.concat("donor", vm.toString(i)));
             donors.push(d);
             usdc_.mint(d, 1_000_000e6);
+            vm.prank(d);
+            usdc_.approve(address(tracker_), type(uint256).max); // caution de contestation
         }
     }
 
@@ -59,6 +63,10 @@ contract Handler is Test {
         vault.donate(amount);
         vm.stopPrank();
         ghostDeposits += amount;
+    }
+
+    function setArbiter(address arbiter_) external {
+        arbiter = arbiter_;
     }
 
     function warp(uint256 secs) external {
@@ -119,6 +127,59 @@ contract Handler is Test {
         tracker.expire(id);
     }
 
+    /// @dev Jalon approuvé, contesté par un donateur, puis tranché (retenu ou rejeté) ou laissé expirer.
+    function disputeMilestone(uint256 amount, uint256 seed, uint8 outcome) external {
+        if (vault.state() != DonationVault.State.Active || tracker.activeCount() != 0) return;
+        uint256 available = vault.totalRaised() - tracker.committed();
+        if (available == 0) return;
+        amount = bound(amount, 1, available);
+        address d = donors[seed % donors.length];
+        if (vault.donations(d) == 0) return;
+
+        vm.startPrank(org);
+        uint256 id = tracker.createMilestone(supplier, amount, uint64(block.timestamp + 30 days), "ipfs://x");
+        tracker.lockMilestone(id);
+        tracker.submitProof(id, "bafy");
+        vm.stopPrank();
+        uint256 dl = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(supplierPk, tracker.confirmDigest(id, dl));
+        tracker.confirmDelivery(id, dl, abi.encodePacked(r, s, v));
+        vm.prank(auditor);
+        tracker.approve(id);
+
+        vm.prank(d);
+        tracker.openDispute(id, "contestation");
+        ghostDepositsHeld += tracker.disputeDeposit();
+
+        outcome = outcome % 3;
+        if (outcome == 2) return; // laissée ouverte : `expireDisputes` pourra la faire expirer
+
+        vm.prank(arbiter);
+        tracker.resolveDispute(id, outcome == 0, "decision");
+        ghostDepositsHeld -= tracker.getDispute(id).deposit;
+        if (outcome == 1) {
+            vm.warp(block.timestamp + tracker.challengePeriod());
+            tracker.executeRelease(id);
+            ghostReleased += amount;
+            releaseCount[id]++;
+            if (releaseCount[id] > maxReleaseCount) maxReleaseCount = releaseCount[id];
+        }
+    }
+
+    /// @dev Fait expirer les contestations jamais tranchées (caution rendue, campagne Halted).
+    function expireDisputes() external {
+        uint256 n = tracker.milestoneCount();
+        for (uint256 id; id < n; id++) {
+            MilestoneTracker.Milestone memory m = tracker.getMilestone(id);
+            if (m.status != MilestoneTracker.Status.Disputed) continue;
+            if (block.timestamp <= uint256(m.deadline) + tracker.gracePeriod()) {
+                vm.warp(uint256(m.deadline) + tracker.gracePeriod() + 1);
+            }
+            tracker.expire(id);
+            ghostDepositsHeld -= tracker.getDispute(id).deposit;
+        }
+    }
+
     function close() external {
         if (vault.state() != DonationVault.State.Active || tracker.activeCount() != 0) return;
         vm.prank(org);
@@ -139,8 +200,10 @@ contract InvariantsTest is BaseTest {
     Handler handler;
 
     function setUp() public override {
+        disputeDeposit = 5e6;
         super.setUp();
         handler = new Handler(usdc, vault, tracker, org, auditor, supplierPk);
+        handler.setArbiter(arbiter);
         targetContract(address(handler));
     }
 
@@ -160,6 +223,11 @@ contract InvariantsTest is BaseTest {
     /// @notice Un jalon n'est libéré qu'une seule fois (§8.2).
     function invariant_MilestoneReleasedAtMostOnce() public view {
         assertLe(handler.maxReleaseCount(), 1);
+    }
+
+    /// @notice Le tracker ne détient que les cautions des contestations en cours (Phase 2).
+    function invariant_TrackerHoldsOnlyOpenDeposits() public view {
+        assertEq(usdc.balanceOf(address(tracker)), handler.ghostDepositsHeld());
     }
 
     /// @notice Les engagements ne dépassent jamais le total collecté (§4.3).

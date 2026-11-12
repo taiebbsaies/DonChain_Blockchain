@@ -7,6 +7,8 @@ export type Deployment = {
   registry: `0x${string}`;
   receipt: `0x${string}`;
   factory: `0x${string}`;
+  /** Safe multisig ou TimelockController administrant le registre (absent en local). */
+  admin?: `0x${string}`;
 };
 
 export const deployments: Record<number, Deployment> = {
@@ -17,5 +19,14 @@ export const deployments: Record<number, Deployment> = {
     "registry": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
     "startBlock": 0,
     "usdc": "0x5FbDB2315678afecb367f032d93F642f64180aa3"
+  },
+  "84532": {
+    "admin": "0xc81c84604c17BE4C17A1a8e9a3eF10EF0786DC30",
+    "chainId": 84532,
+    "factory": "0x07Ee530a21e45463f755AE30521D148747C8FE1D",
+    "receipt": "0xaa179F6CE0C8E1dC1D1E70e9d84e5De78468d53A",
+    "registry": "0x24B5f6E067012f2d2931b7d45621A0190FD2BFf9",
+    "startBlock": 57632315,
+    "usdc": "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
   }
 };

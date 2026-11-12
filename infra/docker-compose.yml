@@ -7,5 +7,9 @@ services:
       POSTGRES_DB: donchain
     ports: ["5432:5432"]
     volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U donchain"]
+      interval: 5s
+      retries: 10
 volumes:
   dbdata:

@@ -11,6 +11,7 @@ export const ROLE_IDS = {
   supplier: keccak256(toBytes("SUPPLIER_ROLE")),
   auditor: keccak256(toBytes("AUDITOR_ROLE")),
   pauser: keccak256(toBytes("PAUSER_ROLE")),
+  arbiter: keccak256(toBytes("ARBITER_ROLE")),
 } as const;
 
 export type Roles = Record<keyof typeof ROLE_IDS, boolean>;

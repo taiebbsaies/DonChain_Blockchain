@@ -30,27 +30,39 @@ export function ConnectButton() {
   const errorText = error && !isUserRejection(error) ? errorMessage(error) : null;
 
   if (!isConnected || !address) {
-    if (!hasWallet) {
+    if (!hasWallet && !connectors.some((c) => c.type === "walletConnect")) {
       return (
         <a href="https://metamask.io/download/" target="_blank" rel="noreferrer" className="btn-secondary">
           Installer un portefeuille
         </a>
       );
     }
-    const injected = connectors[0];
+    // Connexion d'abord, SANS imposer de réseau : certains portefeuilles (Trust Wallet…) se bloquent
+    // quand on leur demande d'ajouter/changer de réseau pendant la connexion. Le changement de réseau
+    // est proposé ensuite, comme une étape séparée (bouton « Passer sur … »).
+    const available = connectors.filter((c) => c.type !== "injected" || hasWallet);
     return (
       <div className="flex flex-col items-end gap-1">
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={!injected || isPending}
-          onClick={() => {
-            reset();
-            if (injected) connect({ connector: injected, chainId: TARGET_CHAIN_ID });
-          }}
-        >
-          {isPending ? "Connexion… (voir le portefeuille)" : "Connecter un portefeuille"}
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          {available.map((connector) => (
+            <button
+              key={connector.uid}
+              type="button"
+              className={connector.type === "injected" ? "btn-primary" : "btn-secondary"}
+              disabled={isPending}
+              onClick={() => {
+                reset();
+                connect({ connector });
+              }}
+            >
+              {isPending
+                ? "Connexion… (voir le portefeuille)"
+                : connector.type === "walletConnect"
+                  ? "Portefeuille mobile"
+                  : "Connecter un portefeuille"}
+            </button>
+          ))}
+        </div>
         {errorText && (
           <p role="alert" className="max-w-xs text-right text-xs text-danger">
             {errorText}
@@ -69,7 +81,10 @@ export function ConnectButton() {
           disabled={switching}
           onClick={() => switchChain({ chainId: TARGET_CHAIN_ID })}
         >
-          {switching ? "Changement…" : `Passer sur ${targetChain.name}`}
+          {switching ? "Changement… (voir le portefeuille)" : `Passer sur ${targetChain.name}`}
+        </button>
+        <button type="button" className="btn-ghost text-xs" onClick={() => disconnect()}>
+          Déconnecter
         </button>
         {errorText && (
           <p role="alert" className="max-w-xs text-right text-xs text-danger">

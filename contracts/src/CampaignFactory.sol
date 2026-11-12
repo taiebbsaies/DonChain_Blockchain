@@ -23,6 +23,10 @@ contract CampaignFactory {
     address public immutable trackerImplementation;
     uint64 public immutable gracePeriod;
     uint64 public immutable challengePeriod;
+    /// @notice Seuil de double validation par deux auditeurs (0 = désactivé), identique pour toutes les campagnes.
+    uint256 public immutable secondApprovalThreshold;
+    /// @notice Caution USDC pour contester un jalon (0 = aucune).
+    uint256 public immutable disputeDeposit;
 
     struct Campaign {
         address org;
@@ -53,7 +57,9 @@ contract CampaignFactory {
         AttestationRegistry registry_,
         DonationReceipt receipt_,
         uint64 gracePeriod_,
-        uint64 challengePeriod_
+        uint64 challengePeriod_,
+        uint256 secondApprovalThreshold_,
+        uint256 disputeDeposit_
     ) {
         if (address(usdc_) == address(0) || address(registry_) == address(0) || address(receipt_) == address(0)) {
             revert InvalidParams();
@@ -63,6 +69,8 @@ contract CampaignFactory {
         receipt = receipt_;
         gracePeriod = gracePeriod_;
         challengePeriod = challengePeriod_;
+        secondApprovalThreshold = secondApprovalThreshold_;
+        disputeDeposit = disputeDeposit_;
         vaultImplementation = address(new DonationVault());
         trackerImplementation = address(new MilestoneTracker());
     }
@@ -111,7 +119,9 @@ contract CampaignFactory {
                 org: msg.sender,
                 sequential: p.sequential,
                 gracePeriod: gracePeriod,
-                challengePeriod: challengePeriod
+                challengePeriod: challengePeriod,
+                secondApprovalThreshold: secondApprovalThreshold,
+                disputeDeposit: disputeDeposit
             })
         );
 

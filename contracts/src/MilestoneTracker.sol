@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
@@ -10,9 +12,12 @@ import {DonationVault} from "./DonationVault.sol";
 /// @title Suivi des jalons d'une campagne (un clone EIP-1167 par campagne)
 /// @notice Jalons figés, preuves IPFS, machine à états, validation prestataire (EIP-712) + auditeur.
 ///         Seul ce contrat peut ordonner une libération au coffre, vers le prestataire et le montant figés.
-/// @dev MVP (Phase 1). La contestation par les donateurs (`openDispute`) arrive en Phase 2 :
-///      `approvedAt` et `challengePeriod` sont déjà en place pour l'accueillir.
+/// @dev Phase 2 : contestation par les donateurs pendant la fenêtre de contestation (§5.4, §5.5),
+///      tranchée par un arbitre ou un auditeur indépendant, avec caution optionnelle ; double validation
+///      par deux auditeurs distincts au-delà d'un seuil configurable.
 contract MilestoneTracker is Initializable, EIP712 {
+    using SafeERC20 for IERC20;
+
     enum Status {
         Draft, // créé, pas encore engagé
         Pending, // verrouillé, fonds réservés
@@ -21,7 +26,8 @@ contract MilestoneTracker is Initializable, EIP712 {
         Released, // payé (final)
         Rejected, // rejeté par un auditeur (final)
         Cancelled, // annulé par l'organisation avant soumission (final)
-        Expired // date limite + délai de grâce dépassés (final, campagne Halted)
+        Expired, // date limite + délai de grâce dépassés (final, campagne Halted)
+        Disputed // contesté par un donateur pendant la fenêtre de contestation (paiement bloqué)
     }
 
     struct Milestone {
@@ -36,6 +42,16 @@ contract MilestoneTracker is Initializable, EIP712 {
         bool supplierConfirmed;
         uint64 approvedAt;
         address approvedBy;
+        /// @dev Premier auditeur, quand le montant exige une double validation (sinon address(0)).
+        address firstApprover;
+    }
+
+    struct Dispute {
+        address disputer;
+        uint64 openedAt;
+        uint256 deposit;
+        bool resolved;
+        bool upheld;
     }
 
     struct Proof {
@@ -54,10 +70,16 @@ contract MilestoneTracker is Initializable, EIP712 {
     bool public sequential;
     uint64 public gracePeriod;
     uint64 public challengePeriod;
+    /// @notice Montant à partir duquel deux auditeurs distincts doivent approuver (0 = désactivé).
+    uint256 public secondApprovalThreshold;
+    /// @notice Caution en USDC exigée pour ouvrir une contestation (0 = aucune).
+    uint256 public disputeDeposit;
+    IERC20 public usdc;
 
     Milestone[] private _milestones;
     mapping(uint256 id => Proof[]) private _proofs;
     mapping(address supplier => uint256) public nonces;
+    mapping(uint256 id => Dispute) private _disputes;
 
     /// @notice Somme des montants des jalons engagés (Pending, Submitted, Approved, Released).
     uint256 public committed;
@@ -81,6 +103,9 @@ contract MilestoneTracker is Initializable, EIP712 {
     event MilestoneExpired(uint256 indexed id);
     event MilestoneReleased(uint256 indexed id, address indexed supplier, uint256 amount);
     event CampaignClosed();
+    event ApprovalRecorded(uint256 indexed id, address indexed auditor);
+    event DisputeOpened(uint256 indexed id, address indexed disputer, uint256 deposit, string reason);
+    event DisputeResolved(uint256 indexed id, address indexed resolver, bool upheld, string note);
 
     error NotOrg();
     error NotAuditor();
@@ -96,6 +121,11 @@ contract MilestoneTracker is Initializable, EIP712 {
     error InvalidSignature();
     error UnknownMilestone();
     error CampaignNotActive();
+    error NotDonor();
+    error NotResolver();
+    error AlreadyDisputed();
+    error ChallengePeriodOver();
+    error SameAuditor();
 
     modifier onlyOrg() {
         if (msg.sender != org || !registry.hasRole(registry.ORG_ROLE(), msg.sender)) revert NotOrg();
@@ -113,6 +143,8 @@ contract MilestoneTracker is Initializable, EIP712 {
         bool sequential;
         uint64 gracePeriod;
         uint64 challengePeriod;
+        uint256 secondApprovalThreshold;
+        uint256 disputeDeposit;
     }
 
     function initialize(InitParams calldata p) external initializer {
@@ -125,6 +157,9 @@ contract MilestoneTracker is Initializable, EIP712 {
         sequential = p.sequential;
         gracePeriod = p.gracePeriod;
         challengePeriod = p.challengePeriod;
+        secondApprovalThreshold = p.secondApprovalThreshold;
+        disputeDeposit = p.disputeDeposit;
+        usdc = p.vault.usdc();
     }
 
     // ------------------------------------------------------------------
@@ -137,6 +172,16 @@ contract MilestoneTracker is Initializable, EIP712 {
 
     function getMilestone(uint256 id) external view returns (Milestone memory) {
         return _get(id);
+    }
+
+    function getDispute(uint256 id) external view returns (Dispute memory) {
+        _get(id);
+        return _disputes[id];
+    }
+
+    /// @notice Vrai si ce jalon exige l'approbation de deux auditeurs distincts.
+    function requiresSecondApproval(uint256 id) public view returns (bool) {
+        return secondApprovalThreshold != 0 && _get(id).amount >= secondApprovalThreshold;
     }
 
     function proofCount(uint256 id) external view returns (uint256) {
@@ -202,7 +247,8 @@ contract MilestoneTracker is Initializable, EIP712 {
                 status: Status.Draft,
                 supplierConfirmed: false,
                 approvedAt: 0,
-                approvedBy: address(0)
+                approvedBy: address(0),
+                firstApprover: address(0)
             })
         );
         emit MilestoneCreated(id, supplier, amount, deadline, descriptionHash, descriptionURI);
@@ -234,6 +280,7 @@ contract MilestoneTracker is Initializable, EIP712 {
         _proofs[id].push(Proof({cid: cid, submitter: msg.sender, timestamp: uint64(block.timestamp)}));
         m.status = Status.Submitted;
         m.supplierConfirmed = false;
+        m.firstApprover = address(0); // une nouvelle preuve doit être revue par tous les auditeurs
         emit MilestoneSubmitted(id, cid, _proofs[id].length - 1);
     }
 
@@ -282,12 +329,23 @@ contract MilestoneTracker is Initializable, EIP712 {
     // ------------------------------------------------------------------
 
     /// @notice Submitted -> Approved. Exige la confirmation préalable du prestataire (§5.2).
+    /// @dev Au-delà de `secondApprovalThreshold`, le premier appel enregistre l'approbation et seul
+    ///      un second auditeur, distinct du premier, fait passer le jalon en Approved.
     function approve(uint256 id) external {
         Milestone storage m = _get(id);
         _requireAuditor(m);
         _requireStatus(m, Status.Submitted);
         if (!m.supplierConfirmed) revert InvalidStatus(m.status);
         _requireActive();
+
+        if (requiresSecondApproval(id)) {
+            if (m.firstApprover == address(0)) {
+                m.firstApprover = msg.sender;
+                emit ApprovalRecorded(id, msg.sender);
+                return;
+            }
+            if (m.firstApprover == msg.sender) revert SameAuditor();
+        }
 
         m.status = Status.Approved;
         m.approvedAt = uint64(block.timestamp);
@@ -328,9 +386,11 @@ contract MilestoneTracker is Initializable, EIP712 {
     }
 
     /// @notice Pending/Submitted -> Expired après deadline + délai de grâce : la campagne passe Halted.
+    /// @dev Un jalon contesté et jamais tranché expire aussi : la caution est rendue au donateur.
     function expire(uint256 id) external {
         Milestone storage m = _get(id);
-        if (m.status != Status.Pending && m.status != Status.Submitted) revert InvalidStatus(m.status);
+        Status st = m.status;
+        if (st != Status.Pending && st != Status.Submitted && st != Status.Disputed) revert InvalidStatus(st);
         if (block.timestamp <= uint256(m.deadline) + gracePeriod) revert NotExpired();
 
         m.status = Status.Expired;
@@ -338,7 +398,73 @@ contract MilestoneTracker is Initializable, EIP712 {
         activeCount--;
         emit MilestoneExpired(id);
 
+        if (st == Status.Disputed) {
+            Dispute storage d = _disputes[id];
+            d.resolved = true;
+            if (d.deposit != 0) usdc.safeTransfer(d.disputer, d.deposit);
+        }
+
         if (vault.state() == DonationVault.State.Active) vault.halt();
+    }
+
+    // ------------------------------------------------------------------
+    // Contestation (Phase 2, §5.4 / §5.5)
+    // ------------------------------------------------------------------
+
+    /// @notice Approved -> Disputed. Réservé aux donateurs de la campagne, pendant la fenêtre de contestation.
+    /// @dev Une seule contestation par jalon (anti-blocage). Caution `disputeDeposit` en USDC, à approuver
+    ///      au préalable : rendue si la contestation est retenue, versée au prestataire sinon (dédommagement du retard).
+    function openDispute(uint256 id, string calldata reason) external {
+        Milestone storage m = _get(id);
+        _requireStatus(m, Status.Approved);
+        if (block.timestamp >= uint256(m.approvedAt) + challengePeriod) revert ChallengePeriodOver();
+        if (_disputes[id].disputer != address(0)) revert AlreadyDisputed();
+        if (vault.donations(msg.sender) == 0) revert NotDonor();
+        if (bytes(reason).length == 0) revert InvalidParams();
+
+        uint256 deposit = disputeDeposit;
+        _disputes[id] = Dispute({
+            disputer: msg.sender, openedAt: uint64(block.timestamp), deposit: deposit, resolved: false, upheld: false
+        });
+        m.status = Status.Disputed;
+        emit DisputeOpened(id, msg.sender, deposit, reason);
+
+        if (deposit != 0) usdc.safeTransferFrom(msg.sender, address(this), deposit);
+    }
+
+    /// @notice Tranche une contestation. Retenue : Disputed -> Rejected (fonds réservés libérés).
+    ///         Rejetée : Disputed -> Approved (le paiement redevient possible après la fenêtre initiale).
+    /// @dev Arbitre (ARBITER_ROLE) ou auditeur attesté, distinct de l'organisation, du prestataire,
+    ///      des auditeurs ayant approuvé le jalon et du donateur contestataire.
+    function resolveDispute(uint256 id, bool upheld, string calldata note) external {
+        Milestone storage m = _get(id);
+        _requireStatus(m, Status.Disputed);
+        Dispute storage d = _disputes[id];
+        if (
+            !registry.hasRole(registry.ARBITER_ROLE(), msg.sender)
+                && !registry.hasRole(registry.AUDITOR_ROLE(), msg.sender)
+        ) revert NotResolver();
+        if (
+            msg.sender == org || msg.sender == m.supplier || msg.sender == m.approvedBy || msg.sender == m.firstApprover
+                || msg.sender == d.disputer
+        ) revert SeparationOfPowers();
+
+        d.resolved = true;
+        d.upheld = upheld;
+        address depositTo;
+        if (upheld) {
+            m.status = Status.Rejected;
+            committed -= m.amount;
+            activeCount--;
+            depositTo = d.disputer;
+            emit MilestoneRejected(id, msg.sender, note);
+        } else {
+            m.status = Status.Approved;
+            depositTo = m.supplier;
+        }
+        emit DisputeResolved(id, msg.sender, upheld, note);
+
+        if (d.deposit != 0) usdc.safeTransfer(depositTo, d.deposit);
     }
 
     // ------------------------------------------------------------------

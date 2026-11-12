@@ -1,7 +1,7 @@
 {
   "name": "Donchain",
   "version": "1.0.0",
-  "description": "",
+  "description": "DonChain : dons tra\u00e7ables sur blockchain (s\u00e9questre, jalons, contestations)",
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
@@ -9,7 +9,10 @@
     "contracts:test": "cd contracts && forge test",
     "chain": "anvil",
     "chain:seed": "cd contracts && forge script script/LocalDemo.s.sol --rpc-url http://127.0.0.1:8545 --broadcast && cd .. && pnpm --filter @donchain/shared generate",
-    "web": "pnpm --filter web dev"
+    "web": "pnpm --filter web dev",
+    "db": "docker compose -f infra/docker-compose.yml up -d",
+    "api": "pnpm --filter api start:dev",
+    "api:reindex": "pnpm --filter api build && pnpm --filter api reindex"
   },
   "keywords": [],
   "author": "",

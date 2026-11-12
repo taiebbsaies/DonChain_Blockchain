@@ -23,7 +23,7 @@ export function DonatePanel({ campaign }: { campaign: CampaignSummary }) {
   const amount = parseUsdc(input);
 
   let problem: string | null = null;
-  if (input && amount === null) problem = "Montant invalide (6 décimales maximum).";
+  if (input && amount === null) problem = "Montant non reconnu (ex. 1 000 ou 12,50 ; 6 décimales maximum).";
   else if (amount !== null && amount < campaign.minDonation)
     problem = `Le don minimum est de ${formatUsdc(campaign.minDonation)}.`;
   else if (amount !== null && amount > room) problem = `Il reste ${formatUsdc(room)} avant l'objectif maximal.`;
@@ -105,7 +105,12 @@ export function DonatePanel({ campaign }: { campaign: CampaignSummary }) {
             />
             <p id="amount-help" className={`mt-1.5 text-xs ${problem ? "text-danger" : "text-ink-muted"}`}>
               {problem ??
-                (position ? `Solde : ${formatUsdc(position.usdcBalance)}` : "Connectez un portefeuille pour donner.")}
+                [
+                  amount !== null ? `= ${formatUsdc(amount)}` : null,
+                  position ? `Solde : ${formatUsdc(position.usdcBalance)}` : "Connectez un portefeuille pour donner.",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
             </p>
           </div>
 

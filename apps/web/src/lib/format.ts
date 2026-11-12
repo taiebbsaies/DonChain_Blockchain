@@ -7,10 +7,53 @@ export function formatUsdc(value: bigint): string {
   return `${usdcFormatter.format(Number(formatUnits(value, USDC_DECIMALS)))} USDC`;
 }
 
-/** Convertit une saisie utilisateur ("12,5" ou "12.5") en unités USDC ; null si invalide. */
+/**
+ * Normalise une saisie de montant en notation décimale à point ("1234.5"), ou null si invalide.
+ *
+ * Formats acceptés :
+ *  - français : "1 000", "1 000,50", "12,5" (espaces, y compris insécables, comme séparateurs de milliers)
+ *  - points de milliers : "1.000", "1.000.000", "1.000,50"
+ *  - anglais : "1,000.50", "12.5"
+ *
+ * Règles :
+ *  - si "," et "." sont présents, le dernier des deux est le séparateur décimal ;
+ *  - "," seule est toujours décimale (usage français) : "1,000" = 1 ;
+ *  - "." seul suivi de groupes d'exactement 3 chiffres ("1.000", "12.500.000") est un séparateur
+ *    de milliers ; sinon c'est la virgule décimale ("12.5", "0.250", "1234.567").
+ */
+export function normalizeAmountInput(input: string): string | null {
+  let s = input.trim().replace(/[\s  ']/g, "");
+  if (s === "") return null;
+
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+
+  if (lastComma !== -1 && lastDot !== -1) {
+    const decimal = lastComma > lastDot ? "," : ".";
+    const thousands = decimal === "," ? "." : ",";
+    const [intPart, fracPart, ...rest] = s.split(decimal);
+    if (rest.length > 0) return null;
+    if (intPart.includes(thousands) && !new RegExp(`^\\d{1,3}(\\${thousands}\\d{3})+$`).test(intPart)) return null;
+    s = `${intPart.replaceAll(thousands, "")}.${fracPart}`;
+  } else if (lastComma !== -1) {
+    if (s.indexOf(",") !== lastComma) return null; // "1,000,000" est ambigu en français : refusé
+    s = s.replace(",", ".");
+  } else if (lastDot !== -1) {
+    if (/^\d{1,3}(\.\d{3})+$/.test(s) && !/^0\./.test(s)) {
+      s = s.replaceAll(".", "");
+    } else if (s.indexOf(".") !== lastDot) {
+      return null;
+    }
+  }
+
+  if (!/^\d+(\.\d*)?$/.test(s)) return null;
+  return s.endsWith(".") ? s.slice(0, -1) : s;
+}
+
+/** Convertit une saisie utilisateur en unités USDC ; null si invalide ou plus de 6 décimales. */
 export function parseUsdc(input: string): bigint | null {
-  const normalized = input.trim().replace(",", ".");
-  if (!/^\d+(\.\d{0,6})?$/.test(normalized)) return null;
+  const normalized = normalizeAmountInput(input);
+  if (normalized === null || !/^\d+(\.\d{0,6})?$/.test(normalized)) return null;
   try {
     return parseUnits(normalized, USDC_DECIMALS);
   } catch {
@@ -73,6 +116,13 @@ const CONTRACT_ERRORS: Record<string, string> = {
   HardCapExceeded: "Ce don dépasserait l'objectif maximal.",
   NothingToRefund: "Rien à rembourser pour cette adresse.",
   EnforcedPause: "La campagne est en pause.",
+  NotDonor: "Seuls les donateurs de cette campagne peuvent contester un jalon.",
+  NotResolver: "Seul un arbitre ou un auditeur attesté peut trancher une contestation.",
+  AlreadyDisputed: "Ce jalon a déjà été contesté une fois.",
+  ChallengePeriodOver: "La fenêtre de contestation est close.",
+  SameAuditor: "La seconde approbation doit venir d'un autre auditeur.",
+  ERC20InsufficientAllowance: "Autorisez d'abord l'USDC pour la caution.",
+  ERC20InsufficientBalance: "Solde USDC insuffisant.",
 };
 
 /** Message d'erreur court pour une transaction échouée (viem expose `shortMessage`). */

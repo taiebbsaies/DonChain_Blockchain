@@ -34,6 +34,17 @@ export type CampaignSummary = {
 
 export type Proof = { cid: string; submitter: Address; timestamp: bigint };
 
+/** Contestation d'un donateur (Phase 2). `null` si le jalon n'a jamais été contesté. */
+export type Dispute = {
+  disputer: Address;
+  openedAt: bigint;
+  deposit: bigint;
+  resolved: boolean;
+  upheld: boolean;
+};
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 export type Milestone = {
   id: bigint;
   supplier: Address;
@@ -46,6 +57,11 @@ export type Milestone = {
   supplierConfirmed: boolean;
   approvedAt: bigint;
   approvedBy: Address;
+  /** Premier auditeur quand une double validation est exigée (adresse nulle sinon). */
+  firstApprover: Address;
+  /** Le montant atteint le seuil : deux auditeurs distincts doivent approuver. */
+  requiresSecondApproval: boolean;
+  dispute: Dispute | null;
   proofs: Proof[];
 };
 
@@ -57,6 +73,10 @@ export type CampaignDetail = {
   committed: bigint;
   /** Un seul jalon en cours à la fois. */
   sequential: boolean;
+  /** Seuil de double validation (0 = désactivé). */
+  secondApprovalThreshold: bigint;
+  /** Caution USDC pour contester un jalon. */
+  disputeDeposit: bigint;
   /** Horodatage du dernier bloc : l'heure de référence de la chaîne (utile sur anvil). */
   chainNow: bigint;
 };
@@ -127,11 +147,17 @@ export async function fetchCampaigns(client: PublicClient, dep: Deployment): Pro
   return campaigns.reverse(); // les plus récentes d'abord
 }
 
-async function fetchMilestone(client: PublicClient, tracker: Address, id: bigint): Promise<Milestone> {
+async function fetchMilestone(
+  client: PublicClient,
+  tracker: Address,
+  id: bigint,
+  secondApprovalThreshold: bigint,
+): Promise<Milestone> {
   const t = { address: tracker, abi: milestoneTrackerAbi } as const;
-  const [m, proofCount] = await Promise.all([
+  const [m, proofCount, d] = await Promise.all([
     client.readContract({ ...t, functionName: "getMilestone", args: [id] }),
     client.readContract({ ...t, functionName: "proofCount", args: [id] }),
+    client.readContract({ ...t, functionName: "getDispute", args: [id] }),
   ]);
   const proofIndexes = Array.from({ length: Number(proofCount) }, (_, i) => BigInt(i));
   const [proofs, metadata] = await Promise.all([
@@ -151,6 +177,12 @@ async function fetchMilestone(client: PublicClient, tracker: Address, id: bigint
     supplierConfirmed: m.supplierConfirmed,
     approvedAt: BigInt(m.approvedAt),
     approvedBy: m.approvedBy,
+    firstApprover: m.firstApprover,
+    requiresSecondApproval: secondApprovalThreshold !== 0n && m.amount >= secondApprovalThreshold,
+    dispute:
+      d.disputer === ZERO_ADDRESS
+        ? null
+        : { disputer: d.disputer, openedAt: BigInt(d.openedAt), deposit: d.deposit, resolved: d.resolved, upheld: d.upheld },
     proofs: proofs.map((p) => ({ cid: p.cid, submitter: p.submitter, timestamp: BigInt(p.timestamp) })),
   };
 }
@@ -158,16 +190,21 @@ async function fetchMilestone(client: PublicClient, tracker: Address, id: bigint
 export async function fetchCampaignDetail(client: PublicClient, dep: Deployment, id: bigint): Promise<CampaignDetail> {
   const summary = await fetchCampaignSummary(client, dep, id);
   const t = { address: summary.tracker, abi: milestoneTrackerAbi } as const;
-  const [count, challengePeriod, gracePeriod, committed, sequential, block] = await Promise.all([
+  const [count, challengePeriod, gracePeriod, committed, sequential, secondApprovalThreshold, disputeDeposit, block] =
+    await Promise.all([
     client.readContract({ ...t, functionName: "milestoneCount" }),
     client.readContract({ ...t, functionName: "challengePeriod" }),
     client.readContract({ ...t, functionName: "gracePeriod" }),
     client.readContract({ ...t, functionName: "committed" }),
     client.readContract({ ...t, functionName: "sequential" }),
+    client.readContract({ ...t, functionName: "secondApprovalThreshold" }),
+    client.readContract({ ...t, functionName: "disputeDeposit" }),
     client.getBlock(),
   ]);
   const ids = Array.from({ length: Number(count) }, (_, i) => BigInt(i));
-  const milestones = await Promise.all(ids.map((mid) => fetchMilestone(client, summary.tracker, mid)));
+  const milestones = await Promise.all(
+    ids.map((mid) => fetchMilestone(client, summary.tracker, mid, secondApprovalThreshold)),
+  );
 
   return {
     summary,
@@ -176,6 +213,8 @@ export async function fetchCampaignDetail(client: PublicClient, dep: Deployment,
     gracePeriod: BigInt(gracePeriod),
     committed,
     sequential,
+    secondApprovalThreshold,
+    disputeDeposit,
     chainNow: block.timestamp,
   };
 }
@@ -191,10 +230,11 @@ export async function fetchAllCampaignDetails(client: PublicClient, dep: Deploym
   return details.reverse();
 }
 
-/** Jalons en cours (Pending, Submitted, Approved) : bloquent la clôture et, en mode séquentiel, le verrouillage. */
+/** Jalons en cours (Pending, Submitted, Approved, Disputed) : bloquent la clôture et, en mode séquentiel, le verrouillage. */
 export function activeMilestoneCount(detail: CampaignDetail): number {
-  return detail.milestones.filter((m) => m.status === "Pending" || m.status === "Submitted" || m.status === "Approved")
-    .length;
+  return detail.milestones.filter(
+    (m) => m.status === "Pending" || m.status === "Submitted" || m.status === "Approved" || m.status === "Disputed",
+  ).length;
 }
 
 export async function fetchDonorPosition(

@@ -12,6 +12,7 @@ export const MilestoneStatus = [
   "Rejected",
   "Cancelled",
   "Expired",
+  "Disputed",
 ] as const;
 export type MilestoneStatus = (typeof MilestoneStatus)[number];
 

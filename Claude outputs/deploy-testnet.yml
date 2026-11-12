@@ -1,0 +1,38 @@
+# Déploiement Base Sepolia (§13), déclenché à la main depuis l'onglet Actions.
+# Secrets à créer dans l'environnement GitHub « testnet » :
+#   DEPLOYER_PRIVATE_KEY  clé d'un portefeuille DÉDIÉ au déploiement, avec un peu d'ETH Base Sepolia
+#   BASESCAN_API_KEY      vérification des contrats
+# Variables : ADMIN_ADDRESS (Safe), TIMELOCK_DELAY (0 sur testnet, 172800 en production)
+name: Deploy testnet
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: testnet
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.9.0
+      - run: forge test
+      - name: Déploiement et vérification
+        env:
+          BASE_SEPOLIA_RPC_URL: ${{ vars.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org' }}
+          BASESCAN_API_KEY: ${{ secrets.BASESCAN_API_KEY }}
+          USDC_ADDRESS: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+          ADMIN_ADDRESS: ${{ vars.ADMIN_ADDRESS }}
+          TIMELOCK_DELAY: ${{ vars.TIMELOCK_DELAY || '0' }}
+        run: |
+          forge script script/Deploy.s.sol --rpc-url base_sepolia --broadcast --verify \
+            --private-key "${{ secrets.DEPLOYER_PRIVATE_KEY }}"
+      - name: Adresses déployées
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-84532
+          path: contracts/deployments/84532.json

@@ -10,7 +10,10 @@ import { AddressText } from "@/components/AddressText";
 import { MilestoneStatusBadge } from "@/components/Badges";
 import { Notice } from "@/components/Notice";
 import { ProofList } from "@/components/ProofList";
+import { DisputePanel } from "./DisputePanel";
 import { useWalletReady } from "./useWalletReady";
+
+const ZERO = "0x0000000000000000000000000000000000000000";
 
 function Step({ done, children }: { done: boolean; children: React.ReactNode }) {
   return (
@@ -31,8 +34,9 @@ function MilestoneCard({ m, detail }: { m: Milestone; detail: CampaignDetail }) 
   const releaseAt = m.approvedAt + detail.challengePeriod;
   const canRelease = m.status === "Approved" && detail.chainNow >= releaseAt && detail.summary.state === "Active";
   const expireAt = m.deadline + detail.gracePeriod;
-  const canExpire = (m.status === "Pending" || m.status === "Submitted") && detail.chainNow > expireAt;
-  const approvedOrPaid = m.status === "Approved" || m.status === "Released";
+  const canExpire =
+    (m.status === "Pending" || m.status === "Submitted" || m.status === "Disputed") && detail.chainNow > expireAt;
+  const approvedOrPaid = m.status === "Approved" || m.status === "Released" || m.status === "Disputed";
 
   const call = (functionName: "executeRelease" | "expire") =>
     tx.run(functionName, () =>
@@ -78,11 +82,25 @@ function MilestoneCard({ m, detail }: { m: Milestone; detail: CampaignDetail }) 
         <ol className="flex flex-wrap gap-2" aria-label="Étapes de validation du jalon">
           <Step done={m.proofs.length > 0}>Preuve soumise</Step>
           <Step done={m.supplierConfirmed || approvedOrPaid}>Livraison confirmée par le prestataire</Step>
-          <Step done={m.approvedAt > 0n}>Approuvé par l&apos;auditeur</Step>
+          {m.requiresSecondApproval ? (
+            <>
+              <Step done={m.firstApprover !== ZERO || m.approvedAt > 0n}>1er auditeur</Step>
+              <Step done={m.approvedAt > 0n}>2nd auditeur (montant élevé)</Step>
+            </>
+          ) : (
+            <Step done={m.approvedAt > 0n}>Approuvé par l&apos;auditeur</Step>
+          )}
+          {m.dispute && (
+            <Step done={m.dispute.resolved}>
+              {m.dispute.resolved ? "Contestation tranchée" : "Contestation en cours"}
+            </Step>
+          )}
         </ol>
       )}
 
       <ProofList proofs={m.proofs} />
+
+      <DisputePanel m={m} detail={detail} />
 
       {m.status === "Approved" && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-surface-muted p-3 text-sm">
